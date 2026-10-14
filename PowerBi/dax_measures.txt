@@ -1,0 +1,134 @@
+//  MEASURE '_Measures'[Prior Visits Group]
+DEFINE
+    MEASURE '_Measures'[Encounters (Included)] = CALCULATE (
+    COUNTROWS ( Encounters ),
+    ISBLANK ( Encounters[exclusion_reason] )
+)
+    MEASURE '_Measures'[Readmissions 30] = CALCULATE (
+    SUM ( Encounters[readmit_30] ),
+    ISBLANK ( Encounters[exclusion_reason] )
+)
+    MEASURE '_Measures'[Readmission Rate] = DIVIDE ( [Readmissions 30], [Encounters (Included)] )
+    MEASURE '_Measures'[Unique Patients] = CALCULATE (
+    DISTINCTCOUNT ( Encounters[patient_nbr] ),
+    ISBLANK ( Encounters[exclusion_reason] )
+)
+    MEASURE '_Measures'[Avg Length of Stay] = CALCULATE (
+    AVERAGE ( Encounters[time_in_hospital] ),
+    ISBLANK ( Encounters[exclusion_reason] )
+)
+    MEASURE '_Measures'[Tier Encounters] = CALCULATE ( [Encounters (Included)], Encounters[in_tier] = 1 )
+    MEASURE '_Measures'[Tier Readmissions] = CALCULATE ( [Readmissions 30], Encounters[in_tier] = 1 )
+    MEASURE '_Measures'[Tier Rate] = DIVIDE ( [Tier Readmissions], [Tier Encounters] )
+    MEASURE '_Measures'[Rest Rate] = DIVIDE (
+    CALCULATE ( [Readmissions 30], Encounters[in_tier] = 0 ),
+    CALCULATE ( [Encounters (Included)], Encounters[in_tier] = 0 )
+)
+    MEASURE '_Measures'[Tier Share] = DIVIDE ( [Tier Encounters], [Encounters (Included)] )
+    MEASURE '_Measures'[Capture Rate] = DIVIDE ( [Tier Readmissions], [Readmissions 30] )
+    MEASURE '_Measures'[Lift] = DIVIDE ( [Tier Rate], [Rest Rate] )
+    MEASURE '_Measures'[Readmissions Outside Tier] = [Readmissions 30] - [Tier Readmissions]
+    MEASURE '_Measures'[Rate 3+ Prior Visits] = CALCULATE ( [Readmission Rate], Encounters[number_inpatient] >= 3 )
+    MEASURE '_Measures'[Avg LOS Readmitted] = CALCULATE ( [Avg Length of Stay], Encounters[readmit_30] = 1 )
+    MEASURE '_Measures'[n Label] = "n=" & FORMAT ( [Encounters (Included)], "#,0" )
+    MEASURE '_Measures'[Tier Encounters Display] = FORMAT ( [Tier Encounters], "#,0" )
+    MEASURE '_Measures'[Staff Hours Tier] = [Tier Encounters] * [Contacts per Patient Value] * [Minutes per Contact Value] / 60
+    MEASURE '_Measures'[Staff Hours All] = [Encounters (Included)] * [Contacts per Patient Value] * [Minutes per Contact Value] / 60
+    MEASURE '_Measures'[Hours per Readmission Tier] = DIVIDE ( [Staff Hours Tier], [Tier Readmissions] )
+    MEASURE '_Measures'[Hours per Readmission All] = DIVIDE ( [Staff Hours All], [Readmissions 30] )
+    MEASURE '_Measures'[Coordination Saved] = 1 - [Tier Share]
+    MEASURE '_Measures'[Encounters Not Targeted] = [Encounters (Included)] - [Tier Encounters]
+    MEASURE '_Measures'[Contacts Label] = "Contacts per patient: " & [Contacts per Patient Value] & "  (assumption)"
+    MEASURE '_Measures'[Minutes Label] = "Minutes per contact: " & [Minutes per Contact Value] & "  (assumption)"
+    MEASURE '_Measures'[Option Encounters] = VAR c = SELECTEDVALUE ( 'Targeting Options'[Cutoff] )
+RETURN
+    CALCULATE ( [Encounters (Included)], Encounters[number_inpatient] >= c )
+    MEASURE '_Measures'[Option Readmissions] = VAR c = SELECTEDVALUE ( 'Targeting Options'[Cutoff] )
+RETURN
+    CALCULATE ( [Readmissions 30], Encounters[number_inpatient] >= c )
+    MEASURE '_Measures'[Option Staff Hours] = [Option Encounters] * [Contacts per Patient Value] * [Minutes per Contact Value] / 60
+    MEASURE '_Measures'[Option Reach] = DIVIDE ( [Option Readmissions], [Readmissions 30] )
+    MEASURE '_Measures'[Option Hours per Readmission] = DIVIDE ( [Option Staff Hours], [Option Readmissions] )
+    MEASURE '_Measures'[Option n Label] = "n=" & FORMAT ( [Option Encounters], "#,0" )
+    MEASURE '_Measures'[Avg Medications] = CALCULATE ( AVERAGE ( Encounters[num_medications] ), ISBLANK ( Encounters[exclusion_reason] ) )
+    MEASURE '_Measures'[Rate 31+ Medications] = CALCULATE ( [Readmission Rate], Encounters[num_medications] > 30 )
+    MEASURE '_Measures'[HbA1c Not Tested Share] = DIVIDE (
+    CALCULATE ( [Encounters (Included)], Encounters[a1c_result] = "Not tested" ),
+    [Encounters (Included)]
+)
+    MEASURE '_Measures'[Rate HbA1c Not Tested] = CALCULATE ( [Readmission Rate], Encounters[a1c_result] = "Not tested" )
+    MEASURE '_Measures'[Emergency Share] = DIVIDE (
+    CALCULATE ( [Encounters (Included)], Encounters[admission_type_id] = 1 ),
+    [Encounters (Included)]
+)
+    MEASURE '_Measures'[Rate Emergency] = CALCULATE ( [Readmission Rate], Encounters[admission_type_id] = 1 )
+    MEASURE '_Measures'[Selected Group] = SELECTEDVALUE ( 'Diagnosis Group'[diag_group], "All groups" )
+    MEASURE '_Measures'[Selected Image] = SELECTEDVALUE ( 'Diagnosis Group'[image_url] )
+    MEASURE '_Measures'[Share of All Encounters] = DIVIDE (
+    [Encounters (Included)],
+    CALCULATE ( [Encounters (Included)], REMOVEFILTERS ( 'Diagnosis Group' ) )
+)
+    MEASURE '_Measures'[Overall Rate] = CALCULATE ( [Readmission Rate], REMOVEFILTERS ( 'Diagnosis Group' ) )
+    MEASURE '_Measures'[Rate vs Baseline] = VAR d = ( [Readmission Rate] - [Overall Rate] ) * 100
+RETURN
+    IF ( d >= 0, "▲ +", "▼ -" ) & FORMAT ( ABS ( d ), "0.0" ) & " pts"
+    MEASURE '_Measures'[Overall Avg LOS] = CALCULATE ( [Avg Length of Stay], REMOVEFILTERS ( 'Diagnosis Group' ) )
+    MEASURE '_Measures'[Overall Tier Share] = CALCULATE ( [Tier Share], REMOVEFILTERS ( 'Diagnosis Group' ) )
+    MEASURE '_Measures'[Encounters Display] = FORMAT ( [Encounters (Included)], "#,0" )
+    MEASURE '_Measures'[Readmitted Caption] = FORMAT ( [Readmissions 30], "#,0" ) & " readmitted within 30 days"
+    MEASURE '_Measures'[Top Age Caption] = VAR t = ADDCOLUMNS ( VALUES ( Encounters[age_band] ), "@n", [Encounters (Included)] )
+RETURN "Largest age group: " & MAXX ( TOPN ( 1, t, [@n], DESC ), Encounters[age_band] )
+    MEASURE '_Measures'[Rate (min 30)] = IF ( [Encounters (Included)] < 30, BLANK (), [Readmission Rate] )
+
+EVALUATE
+    SUMMARIZECOLUMNS(
+        "Encounters (Included)", [Encounters (Included)],
+        "Readmissions 30", [Readmissions 30],
+        "Readmission Rate", [Readmission Rate],
+        "Unique Patients", [Unique Patients],
+        "Avg Length of Stay", [Avg Length of Stay],
+        "Tier Encounters", [Tier Encounters],
+        "Tier Readmissions", [Tier Readmissions],
+        "Tier Rate", [Tier Rate],
+        "Rest Rate", [Rest Rate],
+        "Tier Share", [Tier Share],
+        "Capture Rate", [Capture Rate],
+        "Lift", [Lift],
+        "Readmissions Outside Tier", [Readmissions Outside Tier],
+        "Rate 3+ Prior Visits", [Rate 3+ Prior Visits],
+        "Avg LOS Readmitted", [Avg LOS Readmitted],
+        "n Label", [n Label],
+        "Tier Encounters Display", [Tier Encounters Display],
+        "Staff Hours Tier", [Staff Hours Tier],
+        "Staff Hours All", [Staff Hours All],
+        "Hours per Readmission Tier", [Hours per Readmission Tier],
+        "Hours per Readmission All", [Hours per Readmission All],
+        "Coordination Saved", [Coordination Saved],
+        "Encounters Not Targeted", [Encounters Not Targeted],
+        "Contacts Label", [Contacts Label],
+        "Minutes Label", [Minutes Label],
+        "Option Encounters", [Option Encounters],
+        "Option Readmissions", [Option Readmissions],
+        "Option Staff Hours", [Option Staff Hours],
+        "Option Reach", [Option Reach],
+        "Option Hours per Readmission", [Option Hours per Readmission],
+        "Option n Label", [Option n Label],
+        "Avg Medications", [Avg Medications],
+        "Rate 31+ Medications", [Rate 31+ Medications],
+        "HbA1c Not Tested Share", [HbA1c Not Tested Share],
+        "Rate HbA1c Not Tested", [Rate HbA1c Not Tested],
+        "Emergency Share", [Emergency Share],
+        "Rate Emergency", [Rate Emergency],
+        "Selected Group", [Selected Group],
+        "Selected Image", [Selected Image],
+        "Share of All Encounters", [Share of All Encounters],
+        "Overall Rate", [Overall Rate],
+        "Rate vs Baseline", [Rate vs Baseline],
+        "Overall Avg LOS", [Overall Avg LOS],
+        "Overall Tier Share", [Overall Tier Share],
+        "Encounters Display", [Encounters Display],
+        "Readmitted Caption", [Readmitted Caption],
+        "Top Age Caption", [Top Age Caption],
+        "Rate (min 30)", [Rate (min 30)],
+        "Prior Visits Group", [Prior Visits Group]
+    )
