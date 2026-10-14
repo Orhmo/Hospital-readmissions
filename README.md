@@ -162,4 +162,4 @@ Hospital-readmissions/
 
 ## Author
 
-[Your name] · [LinkedIn or portfolio link]
+Valentina · Orhmo
