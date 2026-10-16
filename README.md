@@ -2,7 +2,7 @@
 
 Identifying which diabetic patients are at elevated risk of readmission before they leave hospital, and where a limited care-coordination budget would do the most good.
 
-![Dashboard overview](Powerbi_Screenshots/01_overview.png)
+![Dashboard overview](Screenshots/PowerBi/01_overview.png)
 
 ## The business problem
 
@@ -54,6 +54,7 @@ The share of patients flagged differs by race (from 6.7% to 15.8%), so the tier 
 ## Tools
 
 - **MySQL 8 (MySQL Workbench):** loading, cleaning, modelling, quality checks and analysis
+- **Python (Google Colab, pandas, SciPy, matplotlib):** summary statistics, correlation, significance tests and EDA charts
 - **Power BI Desktop:** Power Query, DAX measures and the interactive dashboard
 - **GitHub:** version control and hosting the diagnosis images used in the dashboard
 
@@ -123,10 +124,10 @@ Interactive features include an admission type filter synced across all pages, a
 
 | | |
 |---|---|
-| ![Patterns](Powerbi_Screenshots/02_patterns.png) | ![Risk Tier](Powerbi_Screenshots/03_risk_tier.png) |
-| ![Workload](Powerbi_Screenshots/04_workload.png) | ![Explorer](Powerbi_Screenshots/05_explorer.png) |
+| ![Patterns](Screenshots/PowerBi/02_patterns.png) | ![Risk Tier](Screenshots/PowerBi/03_risk_tier.png) |
+| ![Workload](Screenshots/PowerBi/04_workload.png) | ![Explorer](Screenshots/PowerBi/05_explorer.png) |
 
-The full DAX measure list is in [`powerbi/dax_measures.txt`](powerbi/dax_measures.txt), and the Power Query steps are in [`powerbi/power_query/`](powerbi/power_query/).
+The full DAX measure list is in [`PowerBi/dax_measures.txt`](PowerBi/dax_measures.txt), and the Power Query steps are in [`PowerBi/powerQuery/`](PowerBi/powerQuery/).
 
 ## Repository structure
 
@@ -137,10 +138,13 @@ Hospital-readmissions/
 │   ├── raw/            original UCI files
 │   └── clean/          the seven tables exported from MySQL
 ├── sql/                01_load_raw.sql to 06_analysis.sql
-├── powerbi/            .pbix, PDF, DAX measures, Power Query screenshots
-├── Powerbi_Screenshots/ dashboard pages
+├── notebooks/          eda_stats.ipynb (EDA statistics and charts, Python)
+├── PowerBi/            .pbix, PDF, DAX measures, Power Query screenshots (powerQuery/)
+├── Screenshots/
+│   ├── PowerBi/        dashboard pages
+│   └── EDA/            EDA charts from the notebook
 ├── images/             diagnosis group images used in the Explorer page
-└── docs/               report, slides, data dictionary, cleaning log
+└── docs/               final report, EDA report, data dictionary, cleaning log
 ```
 
 ## How to reproduce
@@ -148,7 +152,8 @@ Hospital-readmissions/
 1. Download the dataset from UCI (link above) into `data/raw/`.
 2. In MySQL 8, enable local file loading (`SET GLOBAL local_infile = 1;`).
 3. Update the file paths at the top of `01_load_raw.sql`, then run the scripts `01` to `06` in order.
-4. Open `powerbi/Meridian_Readmissions_Dashboard.pbix` in Power BI Desktop. If prompted, point the data source to the CSV files in `data/clean/` (Transform data, then Data source settings).
+4. For the EDA statistics and charts, open `notebooks/eda_stats.ipynb` in Google Colab, upload `diabetic_data.csv` and run all cells.
+5. Open `PowerBi/Meridian_Readmissions_Dashboard.pbix` in Power BI Desktop. If prompted, point the data source to the CSV files in `data/clean/` (Transform data, then Data source settings).
 
 ## Limitations
 
