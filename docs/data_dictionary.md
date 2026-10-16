@@ -147,4 +147,4 @@ The mapping file holds three code tables stacked in one file, separated by blank
 | Admission Group | Admission Type | Emergency, Urgent, Elective, Other or unknown |
 | image_url | Diagnosis Group | Link to each group's image on GitHub |
 
-The full list of DAX measures is in `powerbi/dax_measures.txt`.
+The full list of DAX measures is in `PowerBi/dax_measures.txt`.

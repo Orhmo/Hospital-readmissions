@@ -97,7 +97,7 @@ No values were deleted as outliers. Extreme values are real encounters, so they 
 | 24 | `Rate (min 30)` hides rates based on fewer than 30 encounters | Stops small groups (for example 15 encounters) showing misleading rates |
 | 25 | Turned off Auto date/time | No date fields; reduces model size and freezes |
 
-Power Query step screenshots are in `powerbi/power_query/`.
+Power Query step screenshots are in `PowerBi/powerQuery/`.
 
 ## 8. Refresh instructions
 
