@@ -178,7 +178,9 @@ Hospital-readmissions/
 
 ## Image credits
 
-The anatomy illustration on the Overview page was generated with ChatGPT, using an illustration from [St. Paul’s Hospital, Hong Kong](https://www.stpaul.org.hk/en/center-and-service/other-content/detail/understanding-liver-gallbladder-and-pancreas-functions-health) as a visual reference. It is not the original image.
+The anatomy illustration on the Overview page is AI-generated, using an illustration from [St. Paul’s Hospital, Hong Kong](https://www.stpaul.org.hk/en/center-and-service/other-content/detail/understanding-liver-gallbladder-and-pancreas-functions-health) as a visual reference. It is not the original image.
+
+The diagnosis group illustrations on the Explorer page (in `images/`) are also AI-generated.
 
 ## Author
 
