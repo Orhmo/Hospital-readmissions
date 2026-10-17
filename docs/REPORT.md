@@ -13,7 +13,7 @@
 1. **11.4% of included encounters** (11,314 of 99,343) were readmitted within 30 days.
 2. **Prior inpatient visits are the strongest signal.** The rate rises from 8.6% with no prior visits to 40.6% with six or more.
 3. **Readmissions are concentrated.** Patients with two or more encounters are 23.4% of patients but account for 79.8% of readmissions.
-4. **Most other factors are weak.** Age, diagnosis group, admission type, medications and length of stay each move the rate by only a few points. Discharge destination is the exception: encounters transferred to other care had a 20.0% rate, against 9.3% for those discharged home.
+4. **Most other factors show smaller differences.** Looked at one at a time, age, diagnosis group, admission type, medications and length of stay each move the rate by less than five points. Discharge destination shows a larger gap: a combined group of other discharge codes, which includes transfers to other hospitals and care facilities, had a 20.0% rate against 9.3% for those discharged home. This group mixes several types of discharge and needs breaking down before it can guide practice.
 
 **Top recommendation.** Flag every encounter with **two or more prior inpatient visits** at discharge for care-coordination follow-up.
 
@@ -62,13 +62,13 @@ Raw data → clean data → questions → analysis → insights → recommendati
 | Stage | Tool | Output |
 |---|---|---|
 | Load | MySQL (`01_load_raw.sql`) | Text-only staging tables, exact copies of the files |
-| Clean | MySQL (`02_clean.sql`) | Typed table, explicit missing values, exclusion flag, three lookup tables |
-| Model | MySQL (`03_model.sql`) | Star schema: two fact tables and five dimensions |
-| Check | MySQL (`04_quality_checks.sql`) | Row counts, nulls, duplicates and referential integrity, all passing |
+| Clean | MySQL (`02_clean.sql`) | Typed table, explicit missing values, 30-day readmission flag, exclusion flag, three lookup tables |
+| Model | MySQL (`03_model.sql`) | Star schema (two fact tables and five dimensions), analysis bands, diagnosis groups and lookup coverage checks |
+| Check | MySQL (`04_quality_checks.sql`) | Row counts, nulls and duplicates, all passing, then keys and indexes |
 | Tier and validation | MySQL (`05_risk_tier.sql`) | Cutoff comparison, build and test validation, capture curve, workload |
 | Analysis | MySQL (`06_analysis.sql`) | Ten exploratory questions |
 | Statistics | Python in Google Colab (`eda_stats.ipynb`) | Summary statistics, correlation, significance test, validation check |
-| Dashboard | Power BI | Five interactive pages |
+| Dashboard | Power BI | Power Query, DAX measures and five interactive pages |
 
 SQL techniques include CTEs, window functions (`ROW_NUMBER`, `RANK`, `SUM OVER`), joins, `CASE`, `COALESCE`, casting, a `CROSS JOIN` unpivot, primary keys and indexes.
 
@@ -76,28 +76,36 @@ SQL techniques include CTEs, window functions (`ROW_NUMBER`, `RANK`, `SUM OVER`)
 
 Full details are in `docs/cleaning_log.md`.
 
-- **Exclusions:** 2,423 encounters ending in death or hospice were flagged and left out of rates, because those patients cannot or are very unlikely to return. Rows were flagged, not deleted.
+- **Exclusions:** 2,423 encounters were flagged and left out of rates: 1,652 where the patient died and 771 discharged to hospice. Patients who died cannot be readmitted, and hospice care has different goals, so both were treated as outside the scope of a readmission-prevention programme. Rows were flagged, not deleted.
 - **"None" is not missing:** in the HbA1c field, "None" means the test was not done (83.1% of encounters). It was relabelled "Not tested".
 - **Dropped fields:** weight (96.9% missing), examide and citoglipton (one value only).
-- **Outliers kept:** extreme prior-visit counts are real frequent attenders, so they were grouped into open-ended bands rather than removed.
-- **No dates:** `encounter_id` was used as a stand-in for visit order.
+- **Admission type 6:** labelled "NULL" in the lookup file, and relabelled "Not recorded" in Power Query. Together with "Not Available" and "Not Mapped", 10.2% of encounters have no usable admission type.
+- **Medication table:** one row for each encounter and drug where the status is not "No" (120,054 rows). It includes excluded encounters, so they are filtered out where needed.
+- **Outliers kept:** extreme prior-visit counts are plausible for frequent attenders, so they were kept and grouped into open-ended bands. The data does not allow them to be independently confirmed.
+- **No dates:** `encounter_id` was used as a stand-in for visit order in one exploratory query (Q10). This has not been confirmed, so Q10 is not used in the findings.
 
 ### 3.3 Modelling choices
 
 **Why a rule, not a model.** The stakeholder asked for something usable "on a Tuesday morning". A one-line rule based on a field already in the record can be applied at discharge without software, and anyone can check why a patient was flagged.
 
-**Choosing the cutoff.** Patients were split by ID into a 70% build group and a 30% test group (`MOD(patient_nbr, 10) < 7`), so no patient appears in both. Cutoffs of 1+, 2+ and 3+ prior inpatient visits were compared on the build group. **2+ was chosen** as the best balance: it reaches over a quarter of readmissions while flagging only one encounter in seven.
+**Choosing the cutoff.** Patients were split by ID into a 70% build group and a 30% test group (`MOD(patient_nbr, 10) < 7`), so no patient appears in both. Cutoffs of 1+, 2+ and 3+ prior inpatient visits were compared in both groups. **2+ was chosen** as a balance between coverage and workload: it reaches over a quarter of readmissions while flagging about one encounter in seven. Because the cutoffs were compared in both groups, the test group is a consistency check rather than a fully independent test.
 
-**Workload.** Staff hours assume two contacts per patient at 20 minutes each. Both values are adjustable on the dashboard's Workload page.
+**Workload.** Staff hours assume two contacts of 20 minutes for each eligible discharge (encounter), so a patient with several stays is counted once for each discharge. Both values are adjustable on the dashboard's Workload page, where the contacts slider is labelled "contacts per patient" but applies to each discharge.
 
 ### 3.4 Limitations
 
 - **Association, not causation.** The analysis shows which groups had higher observed rates, not why.
 - **Historical data (1999 to 2008).** Current rates and practice may differ.
 - **No dates,** so trends over time, including when any increase started, cannot be measured.
-- **Readmissions to other hospitals are not captured.**
+- **Recorded readmissions only.** Returns to hospitals outside the dataset may not be captured.
 - **Encounters, not patients.** One patient can appear several times.
+- **Repeat stays in the significance test.** The chi-square test and confidence intervals treat each encounter as independent, although some patients appear more than once, so they may overstate certainty. The patient-level 70/30 test split partly addresses this.
+- **How the cutoff was chosen.** The test group is a consistency check, not a fully independent test (see 3.3).
 - **Concentration is partly built in.** Patients who are readmitted naturally have more encounters on record.
+- **Missing and grouped information.** Some fields are largely missing, and broad groups (such as the combined other-discharge group) can hide differences.
+- **One factor at a time.** The comparisons do not show how factors combine, or whether a combined approach would target better.
+- **Limited coverage.** 72.5% of readmissions fall outside the flagged group.
+- **Workload is an estimate.** Hours cover the whole dataset rather than one year, and leave out administration and failed contact attempts. They estimate effort, not readmissions prevented.
 - **The tier is not clinically validated.** It is an analytical flag, not a prediction model or a diagnosis.
 
 ## 4. Results
@@ -120,14 +128,14 @@ Full details are in `docs/cleaning_log.md`.
 | Factor | Lowest group | Highest group | Spread |
 |---|---|---|---|
 | **Prior inpatient visits** | 0 visits: 8.6% | 6+ visits: 40.6% | **32.0 points** |
-| **Discharge destination** | Home: 9.3% | Transferred to other care: 20.0% | **10.7 points** |
+| **Discharge destination** | Home: 9.3% | Other discharge codes, including transfers: 20.0% | **10.7 points** |
 | Length of stay | 1 to 2 days: 9.3% | 8 to 14 days: 13.8% | 4.5 points |
 | Medications | 1 to 10: 9.2% | 21 to 30: 13.2% | 4.0 points |
 | Diagnosis group | Musculoskeletal: 9.5% | Diabetes: 13.1% | 3.6 points |
 | Age (30 to 99) | 50 to 59: 9.8% | 80 to 89: 12.6% | 2.8 points |
 | Admission type | Elective: 10.5% | Emergency: 11.8% | 1.3 points |
 
-Prior inpatient visits stand out by a wide margin, and the correlation analysis agrees: its Spearman correlation with readmission (0.14) is more than twice that of any other numeric field. The pattern also holds **within every diagnosis group** (see the Explorer page) and **across a patient's own visits**: 9.0% on a first visit, 14.2% on a second and 20.9% on a third or later.
+Prior inpatient visits stand out by a wide margin, and the correlation analysis agrees: its Spearman correlation with readmission (0.14) is more than twice that of any other numeric field. On the Explorer page, flagged encounters have a higher rate than the rest **within every diagnosis group**.
 
 Ten insights with their supporting queries are listed in `docs/eda_report.md`.
 
@@ -142,7 +150,7 @@ Ten insights with their supporting queries are listed in `docs/eda_report.md`.
 | 30-day rate | **22.0%** | **9.6%** |
 | 95% confidence interval | 21.3% to 22.7% | 9.4% to 9.8% |
 
-**Statistical significance.** The difference between the tier and everyone else is very unlikely to be chance (chi-square = 1,841, p < 0.001). The confidence intervals do not come close to overlapping.
+**Statistical significance.** The difference between the tier and everyone else is very unlikely to be chance (chi-square = 1,841.5, p < 0.001). The confidence intervals do not come close to overlapping. Both measures treat each encounter as independent (see 3.4).
 
 **Validation on held-out patients**
 
@@ -166,20 +174,11 @@ Performance drops a little on the test group, as expected, but the tier still id
 | **2+ prior visits** | **14,114** | **27.5%** | **9,409** | **3.0** |
 | 3+ prior visits | 6,814 | 15.9% | 4,543 | 2.5 |
 
-Each step up the cutoff makes the team's time more efficient but reaches fewer readmissions. The 2+ tier saves 86% of the effort of contacting everyone.
+Each step up the cutoff makes the team's time more efficient but reaches fewer readmissions. The 2+ tier needs an estimated 86% fewer contact hours than contacting every encounter. The effect of follow-up on readmissions has not been tested.
 
-### 4.5 Fairness check
+### 4.5 Fairness
 
-| Race | Share of encounters flagged |
-|---|---|
-| African American | 15.8% |
-| Hispanic | 14.7% |
-| Caucasian | 14.1% |
-| Other | 9.7% |
-| Asian | 9.6% |
-| Unknown | 6.7% |
-
-Women were flagged slightly more often than men (14.6% vs 13.8%). The tier uses no demographic fields, so these differences reflect differences in prior hospital use. They still need monitoring, because they decide who receives extra support.
+The tier uses no demographic fields, but that alone does not make it fair. Prior hospital use can differ between groups because of differences in need and in access to care, so the flag could reach some groups more than others. The share flagged by race and gender was not measured in this analysis. It should be measured on current local data before any pilot, and monitored throughout (see 5.2).
 
 ## 5. Action plan
 
@@ -188,8 +187,8 @@ Women were flagged slightly more often than men (14.6% vs 13.8%). The tier uses 
 | Priority | Action | Owner | Timescale |
 |---|---|---|---|
 | 1 | Pilot the 2+ flag on one ward: add "inpatient stays in the last 12 months" to the discharge checklist | Discharge planning | 1 month |
-| 2 | Give flagged patients two follow-up contacts within 30 days | Care coordination | During the pilot |
-| 3 | Add discharge destination as a secondary prompt, especially transfers to other care | Discharge planning | During the pilot |
+| 2 | Give each flagged discharge two follow-up contacts within 30 days | Care coordination | During the pilot |
+| 3 | Break down the combined other-discharge group by code, to see whether discharge destination could become a second prompt | Population Health analytics | Before the pilot |
 | 4 | Compare pilot readmission rates with a similar ward not using the flag | Population Health analytics | 3 months |
 | 5 | Roll out more widely, or move to the 1+ or 3+ option, depending on results and capacity | VP of Population Health | 6 months |
 
@@ -201,7 +200,7 @@ Women were flagged slightly more often than men (14.6% vs 13.8%). The tier uses 
 | Tier rate vs rest | Quarterly | Ratio falls well below 2 |
 | Readmissions reached and staff hours used | Monthly | Hours per readmission reached rises above 3.0 |
 | Share flagged by race and gender | Quarterly | Gaps widen, or flagged groups do not see better outcomes |
-| Contacts actually completed | Monthly | Below 80% of flagged patients |
+| Contacts actually completed | Monthly | Below 80% of flagged discharges |
 
 ### 5.3 Risks
 
@@ -218,12 +217,12 @@ Women were flagged slightly more often than men (14.6% vs 13.8%). The tier uses 
 - **De-identified data.** The dataset contains no names, addresses or dates. Patient and encounter IDs are anonymised numbers.
 - **Licence.** Used under CC BY 4.0, with the source cited.
 - **Purpose limitation.** The flag is for prioritising support, never for denying care or for decisions about individuals without clinical review.
-- **Fairness.** The tier uses only prior hospital use, not race or gender, but its effects still differ by group, so monitoring is built into the plan.
+- **Fairness.** The tier uses only prior hospital use, not race or gender, but its effects may still differ by group, so measurement and monitoring are built into the plan.
 - **Transparency.** The rule is one line, the code is public in this repository, and anyone can check why a patient was flagged.
 - **Real-world use.** Applying this to real patient data would need a data protection impact assessment, information governance approval and local clinical validation.
 
 ## 7. Conclusion
 
-Diabetic readmissions in this data cluster among patients who have already been in hospital. A simple rule, two or more inpatient stays in the past year, picks out one encounter in seven at more than double the usual risk, and lets a care-coordination team reach over a quarter of readmissions for about a seventh of the effort of contacting everyone. The next step is to test it on current local data with a small pilot, measure the effect, and keep a close eye on fairness.
+Diabetic readmissions in this data cluster among patients who have already been in hospital. A simple rule, two or more inpatient stays in the past year, picks out about one encounter in seven at more than twice the rate of encounters outside the flagged group, and would let a care-coordination team reach over a quarter of readmissions for about a seventh of the contact hours. The next step is to test it on current local data with a small pilot, measure the effect, and keep a close eye on fairness.
 
 **Repository:** dashboard (`PowerBi/`), SQL (`sql/`), data dictionary, cleaning log and EDA report (`docs/`).
