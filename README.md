@@ -71,6 +71,8 @@ The SQL scripts run in order, each building on the last:
 | `05_risk_tier.sql` | Compares tier cutoffs, validates the chosen tier on held-out patients, builds the capture curve and estimates workload |
 | `06_analysis.sql` | Ten exploratory questions behind the dashboard insights |
 
+Results of the analysis queries are in [`sql/Sample_Outputs.docx`](sql/Sample_Outputs.docx).
+
 SQL techniques used include CTEs, window functions (`ROW_NUMBER`, `RANK`, `SUM OVER`), `CASE`, `COALESCE`, joins, `CROSS JOIN` for unpivoting, primary keys and indexes.
 
 ### Data model
@@ -129,16 +131,25 @@ Interactive features include an admission type filter synced across all pages, a
 
 The full DAX measure list is in [`PowerBi/dax_measures.txt`](PowerBi/dax_measures.txt), and the Power Query steps are in [`PowerBi/powerQuery/`](PowerBi/powerQuery/).
 
+## Documentation
+
+| Document | What it covers |
+|---|---|
+| [Full report](docs/REPORT.md) | Executive summary, methods, results, action plan, ethics |
+| [Exploratory analysis](docs/eda_report.md) | Summary statistics, missing values, correlation, outliers, ten insights |
+| [Data dictionary](docs/data_dictionary.md) | Every field, its type, definition and handling |
+| [Cleaning log](docs/cleaning_log.md) | Each cleaning decision, data lineage and refresh steps |
+
 ## Repository structure
 
 ```
 Hospital-readmissions/
 ├── README.md
+├── eda_stats.ipynb     EDA statistics and charts (Python, Google Colab)
 ├── data/
 │   ├── raw/            original UCI files
 │   └── clean/          the seven tables exported from MySQL
-├── sql/                01_load_raw.sql to 06_analysis.sql
-├── notebooks/          eda_stats.ipynb (EDA statistics and charts, Python)
+├── sql/                01_load_raw.sql to 06_analysis.sql, plus Sample_Outputs.docx
 ├── PowerBi/            .pbix, PDF, DAX measures, Power Query screenshots (powerQuery/)
 ├── Screenshots/
 │   ├── PowerBi/        dashboard pages
@@ -152,7 +163,7 @@ Hospital-readmissions/
 1. Download the dataset from UCI (link above) into `data/raw/`.
 2. In MySQL 8, enable local file loading (`SET GLOBAL local_infile = 1;`).
 3. Update the file paths at the top of `01_load_raw.sql`, then run the scripts `01` to `06` in order.
-4. For the EDA statistics and charts, open `notebooks/eda_stats.ipynb` in Google Colab, upload `diabetic_data.csv` and run all cells.
+4. For the EDA statistics and charts, open `eda_stats.ipynb` in Google Colab, upload `diabetic_data.csv` and run all cells.
 5. Open `PowerBi/Meridian_Readmissions_Dashboard.pbix` in Power BI Desktop. If prompted, point the data source to the CSV files in `data/clean/` (Transform data, then Data source settings).
 
 ## Limitations
