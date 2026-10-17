@@ -176,6 +176,10 @@ Hospital-readmissions/
 - **Concentration is partly built in.** Patients who are readmitted naturally have more encounters on record.
 - **Fairness.** The share of encounters flagged varies by race, so the tier needs monitoring if used.
 
+## Image credits
+
+The anatomy illustration on the Overview page was generated with ChatGPT, using an illustration from [St. Paul’s Hospital, Hong Kong](https://www.stpaul.org.hk/en/center-and-service/other-content/detail/understanding-liver-gallbladder-and-pancreas-functions-health) as a visual reference. It is not the original image.
+
 ## Author
 
 Valentina · Orhmo
