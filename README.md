@@ -81,7 +81,7 @@ Both files were downloaded from the UCI repository and loaded into MySQL exactly
 
 ### Data cleaning and preparation
 
-Cleaning was done in [`02_clean.sql`](sql/02_clean.sql). Each decision is recorded in the [cleaning log](docs/cleaning_log.md).
+Most cleaning was done in [`02_clean.sql`](sql/02_clean.sql), which also creates the 30-day readmission flag and the exclusion flag. A small number of label changes were made in Power Query. Each decision is recorded in the [cleaning log](docs/cleaning_log.md).
 
 | Issue found | What was done |
 |---|---|
@@ -90,7 +90,7 @@ Cleaning was done in [`02_clean.sql`](sql/02_clean.sql). Each decision is record
 | Weight is 96.9% missing | Left out of the clean table |
 | Two medication columns hold only one value | Left out, as they carry no information |
 | The lookup file holds three tables stacked in one | Split into three separate tables |
-| Admission type 6 is labelled "NULL" in the lookup file | Relabelled "Not recorded". Together with "Not Available" and "Not Mapped", 10.2% of stays have no usable admission type |
+| Admission type 6 is labelled "NULL" in the lookup file | Relabelled "Not recorded" in Power Query (Power BI). Together with "Not Available" and "Not Mapped", 10.2% of stays have no usable admission type |
 | Patients who died (1,652 stays) or went to hospice (771 stays) | Flagged and left out of the analysis. Patients who died cannot be readmitted, and hospice care has different goals, so both were treated as outside the scope of a readmission-prevention programme. The rows were kept so they can still be inspected |
 
 After exclusions, the analysis covers **99,343 stays from 69,990 patients**.
@@ -101,28 +101,28 @@ In [`03_model.sql`](sql/03_model.sql):
 
 - Age, length of stay, prior inpatient visits and number of medications were grouped into bands, each with a sort order so charts display correctly.
 - More than 700 primary diagnosis codes were grouped into nine diagnosis groups.
-- The 21 medication columns were reshaped into one table with a row for each stay and drug (120,054 rows).
-- A 30-day readmission flag and an exclusion flag were added to every stay.
+- The 21 medication columns were reshaped into one table with a row for each stay and drug where the medication status was not "No" (120,054 rows). This table includes excluded stays, so they are filtered out where needed.
+- The readmission and exclusion flags created during cleaning were carried into the model.
 
 ### Calculated fields and DAX measures
 
-The Power BI model includes DAX measures for the readmission rate, flagged-group rate, rate for everyone else, share of readmissions captured, staff hours and hours per readmission reached. A measure called Rate (min 30) hides rates for groups with fewer than 30 stays, so very small groups do not give a misleading picture. Every rate counts included stays only. The full list is in [`PowerBi/dax_measures.txt`](PowerBi/dax_measures.txt).
+The Power BI model includes DAX measures for the readmission rate, flagged-group rate, rate for everyone else, share of readmissions captured, staff hours and hours per readmission reached. A measure called Rate (min 30) hides rates for groups with fewer than 30 stays. It is used on the two Explorer page charts, where diagnosis groups can be very small. Every rate counts included stays only. The full list is in [`PowerBi/dax_measures.txt`](PowerBi/dax_measures.txt).
 
 ### Data validation
 
-[`04_quality_checks.sql`](sql/04_quality_checks.sql) checks row counts, missing values, duplicates and links between tables, then adds keys and indexes.
+[`04_quality_checks.sql`](sql/04_quality_checks.sql) checks row counts, missing values and duplicates, then adds keys and indexes. [`03_model.sql`](sql/03_model.sql) checks that every stay links to its lookup tables.
 
 - Row counts matched between the raw and modelled tables (101,766).
-- There were no duplicate stays and no broken links between tables.
+- There were no duplicate stays and no stays without a matching lookup value.
 - The headline figures (99,343 stays, 11,314 readmissions, 11.4%) matched across SQL, Python and Power BI.
 
 ### Data modelling
 
-A star schema with two fact tables, hospital stays (`fact_encounter`) and medications (`fact_medication`), linked to five lookup tables: admission type, discharge destination, admission source, diagnosis group and drug.
+A star schema with two fact tables, hospital stays (`fact_encounter`) and medications (`fact_medication`), and five lookup tables. Admission type, admission source, discharge destination and diagnosis group link to the hospital stays table, and the drug table links to the medications table. The medications table links to hospital stays by stay ID.
 
 ![Data model](PowerBi/powerQuery/model_view.png)
 
-*The data model in Power BI. Each lookup table links to the hospital stays table through its ID.*
+*The data model in Power BI. Admission type, admission source and discharge destination link by their code fields. Diagnosis group links by group name, and Drugs links to Medications by drug name.*
 
 ### Data visualisation
 
@@ -140,7 +140,7 @@ The exploratory analysis was done in SQL ([`06_analysis.sql`](sql/06_analysis.sq
 
 **Trends.** The data has no dates, so trends over time cannot be measured. This also means the analysis cannot show when any increase in readmissions started.
 
-**Outliers.** Some patients had very high numbers of earlier visits, up to 76 emergency visits and 21 inpatient stays. These are real frequent attenders rather than errors, so they were kept and placed in open-ended bands such as "6+".
+**Outliers.** Some patients had very high numbers of earlier visits, up to 76 emergency visits and 21 inpatient stays. These values are plausible for frequent attenders, so they were kept and placed in open-ended bands such as "6+". The data does not allow them to be independently confirmed.
 
 **Missing values.** Weight (96.9%), medical specialty (48.9%) and payer code (39.7%) are the most incomplete fields. Race is missing for 2.2% of stays.
 
@@ -165,7 +165,7 @@ All insights describe **patterns in historical data, not causes**. Each comparis
 *Why it matters:* a concentrated problem can be targeted, which suits a team that cannot contact everyone.
 
 **3. A simple flag separates higher-risk stays, and holds on other patients.**
-*What happened:* stays where the patient had two or more inpatient stays in the previous year had a 22.0% readmission rate, compared with 9.6% for the rest. A chi-square test, which checks whether a difference is larger than chance alone would produce, gave 1,841 (p < 0.001). When patients were split by ID into a 70% group and a 30% group, so that no patient appeared in both, the flagged rate was 2.38 times the rest in the first group and 2.07 times in the second.
+*What happened:* stays where the patient had two or more inpatient stays in the previous year had a 22.0% readmission rate, compared with 9.6% for the rest. A chi-square test, which checks whether a difference is larger than chance alone would produce, gave 1,841.5 (p < 0.001). When patients were split by ID into a 70% group and a 30% group, so that no patient appeared in both, the flagged rate was 2.38 times the rest in the first group and 2.07 times in the second.
 *Why:* the flag is built on the strongest single signal in the data.
 *Why it matters:* the pattern is consistent across separate groups of patients, so it is not simply a feature of one sample.
 
@@ -181,8 +181,8 @@ All insights describe **patterns in historical data, not causes**. Each comparis
 
 **6. Most other characteristics make only a small difference.**
 *What happened:* length of stay (9.3% to 13.8%), number of medications (9.2% to 13.2%), diagnosis group (9.5% to 13.1%), age for adults aged 30 to 99 (9.8% to 12.6%) and admission type (10.5% to 11.8%) each shift the rate by less than five percentage points.
-*Why:* in this data, these characteristics carry much less signal than previous hospital use.
-*Why it matters:* they are useful context for a care plan, but too weak on their own to decide who receives follow-up.
+*Why:* looked at one at a time, these characteristics show much smaller differences than previous hospital use.
+*Why it matters:* they are useful context for a care plan. Whether they would improve targeting in combination with previous stays was not tested.
 
 ## 8. Dashboard preview
 
@@ -198,7 +198,7 @@ Five interactive pages, built in Power BI:
 
 **KPI cards:** stays, unique patients, 30-day readmission rate, average length of stay, share of stays flagged, flagged-group rate, share of readmissions captured, staff hours and hours per readmission reached.
 
-**Filters and interaction:** an admission type filter that applies to every page, a filters panel (age, discharge destination and HbA1c testing), an insights panel on each page, sliders for the workload assumptions and diagnosis group buttons.
+**Filters and interaction:** an admission type filter that stays in sync across every page, a filters panel on each page (age, discharge destination and HbA1c testing, plus diagnosis group on four pages), an insights panel on each page, sliders for the workload assumptions and diagnosis group buttons on the Explorer page. The insights panel text is fixed: it describes the full dataset at the default settings and does not change when filters or sliders change.
 
 | | |
 |---|---|
@@ -208,7 +208,7 @@ Five interactive pages, built in Power BI:
 | | |
 |---|---|
 | ![Insights panel](Screenshots/PowerBi/06_insights_panel.png) | ![Filters panel](Screenshots/PowerBi/07_filters_panel.png) |
-| *The insights panel explains each page in plain language* | *The filters panel narrows every chart on the page* |
+| *The insights panel summarises each page in plain language, using whole-dataset figures* | *The filters panel narrows the charts on the page* |
 
 **Workload assumptions:** staff hours assume two follow-up contacts of 20 minutes each for every eligible discharge. A patient with several eligible stays is counted once for each discharge. Both values can be changed with the sliders on the Workload page. The slider is labelled "contacts per patient", but the calculation applies it to each discharge.
 
@@ -263,7 +263,7 @@ The flag does not use race or gender, but that alone does not make it fair. Befo
 
 ## 12. Conclusion
 
-Meridian Care Network needed to know where its limited follow-up capacity should go. The analysis found that diabetic readmissions in this data cluster among patients who have already spent time in hospital. A single question at discharge, two or more inpatient stays in the past year, picks out about one stay in seven at more than twice the usual readmission rate, and covers over a quarter of all readmissions for about a seventh of the contact hours. The value of the project is a decision the care team can understand and explain: who to follow up, why, and at what cost. The next step is to test it with a small, measured pilot on current local data.
+Meridian Care Network needed to know where its limited follow-up capacity should go. The analysis found that diabetic readmissions in this data cluster among patients who have already spent time in hospital. A single question at discharge, two or more inpatient stays in the past year, picks out about one stay in seven at more than twice the readmission rate of stays outside the flagged group, and covers over a quarter of all readmissions for about a seventh of the contact hours. The value of the project is a decision the care team can understand and explain: who to follow up, why, and at what cost. The next step is to test it with a small, measured pilot on current local data.
 
 ## 13. Relevant links
 
@@ -298,11 +298,11 @@ Hospital-readmissions/
 
 ### How to reproduce
 
-1. In MySQL 8, allow local file loading (`SET GLOBAL local_infile = 1;`) and start with an empty `meridian` database.
+1. In MySQL 8, allow local file loading (`SET GLOBAL local_infile = 1;`). Script 01 creates the `meridian` database, so make sure no database with that name already exists.
 2. Update the two file paths at the top of `01_load_raw.sql`, then run scripts `01` to `06` in order.
 3. Export the seven model tables to `data/clean/`. The exports in this repository use semicolons as separators.
 4. Open `eda_stats.ipynb` in Google Colab, upload `diabetic_data.csv` and run the cells in order.
-5. Open the Power BI file, point the data source to the files in `data/clean/` if prompted, and refresh. The Overview page should show 99,343 stays and 11,314 readmissions.
+5. Open the Power BI file, point the data source to the files in `data/clean/` if prompted, and refresh. Clear any admission type, diagnosis or panel filters, then check that the Overview page shows 99,343 stays and an 11.4% readmission rate.
 
 The workload query in `05_risk_tier.sql` uses the fixed total of 11,314 readmissions, which matches this dataset. Replace it with a calculated total before using different data.
 
