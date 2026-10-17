@@ -1,276 +1,315 @@
 # Diabetic 30-Day Readmission Analysis
 
-Identifying which diabetic patients are at elevated risk of readmission before they leave hospital, and where a limited care-coordination budget would do the most good.
+Finding which diabetic patients are most likely to return to hospital within 30 days of discharge, and estimating how much staff time a targeted follow-up programme would need.
+
+**Tools:** MySQL · Python (Google Colab) · Power BI
 
 ![Dashboard overview](Screenshots/PowerBi/01_overview.png)
 
-## Contents
+## Table of contents
 
-1. [Executive summary](#executive-summary)
-2. [Project overview](#project-overview)
-3. [Data source](#data-source)
-4. [Problem statement](#problem-statement)
-5. [Tools and methodology](#tools-and-methodology)
-6. [Exploratory data analysis](#exploratory-data-analysis)
-7. [Key insights](#key-insights)
-8. [Dashboard](#dashboard)
-9. [Recommendations](#recommendations)
-10. [Implementation](#implementation)
-11. [Limitations](#limitations)
-12. [Conclusion](#conclusion)
-13. [Documentation and links](#documentation-and-links)
-14. [Repository structure](#repository-structure)
-15. [How to reproduce](#how-to-reproduce)
+1. [Executive summary](#1-executive-summary)
+2. [Project overview](#2-project-overview)
+3. [Data source](#3-data-source)
+4. [Problem statement](#4-problem-statement)
+5. [Tools and methodology](#5-tools-and-methodology)
+6. [Exploratory data analysis](#6-exploratory-data-analysis)
+7. [Key insights](#7-key-insights)
+8. [Dashboard preview](#8-dashboard-preview)
+9. [Recommendations](#9-recommendations)
+10. [Limitations](#10-limitations)
+11. [Implementation](#11-implementation)
+12. [Conclusion](#12-conclusion)
+13. [Relevant links](#13-relevant-links)
 
-## Executive summary
+## 1. Executive summary
 
-This project analyses 99,343 hospital encounters for diabetic patients to find who is most likely to be readmitted within 30 days, and how a care-coordination team with limited time should respond. About 1 in 9 encounters (11.4%) ended in a 30-day readmission, and most readmissions came from a small group of returning patients. A simple rule, **flag patients with 2 or more inpatient stays in the past year**, picks out 14.2% of encounters that hold 27.5% of readmissions, at a 22.0% rate against 9.6% for everyone else. The rule held up on patients it was not built on, and targeting it needs about 9,409 staff hours instead of 66,229 to contact everyone. The recommendation is a small pilot on one ward, with fairness monitored throughout.
+This project analyses 99,343 hospital stays by patients with diabetes to answer one practical question: with limited staff time, which patients should a care team follow up after discharge? About 1 in 9 stays (11.4%) was followed by a readmission within 30 days. The clearest warning sign was a patient's number of inpatient stays in the previous year. A simple flag, **two or more stays in the past year**, picks out 14.2% of stays, which hold 27.5% of all readmissions, at a rate of 22.0% compared with 9.6% for everyone else. Following up only this group would take an estimated 86% fewer contact hours than following up every stay. The recommended next step is a small pilot to test whether follow-up actually reduces readmissions.
 
-## Project overview
+## 2. Project overview
 
 **Domain:** healthcare, population health and hospital discharge planning.
 
-**Context:** Meridian Care Network (a fictional healthcare network) has seen diabetic readmissions flagged again by its quality committee. Readmissions within 30 days are costly, often avoidable, and a common measure of hospital quality. The network has a care-coordination team that can follow up with patients after discharge, but not enough capacity to contact everyone.
+**Business context:** Meridian Care Network is a fictional healthcare network used for this case study. Its quality committee flagged diabetic readmissions as a concern. The network has a care-coordination team that can contact patients after they leave hospital, but it does not have the capacity to contact everyone.
 
-**Why it matters:** the VP of Population Health did not want another chart showing that the number went up. The aim was something the discharge planning team can use on a Tuesday morning: a clear, explainable way to decide who gets follow-up, with the cost in staff time.
+**Why it matters:** a readmission within 30 days is a common measure of hospital quality, and some readmissions may be preventable with better follow-up. The VP of Population Health did not want another report showing that the number had gone up. They wanted a clear way for discharge staff to decide who receives follow-up, and an estimate of what it would cost in staff time.
 
-## Data source
+## 3. Data source
+
+The data is the [Diabetes 130-US Hospitals for Years 1999-2008](https://archive.ics.uci.edu/dataset/296/diabetes+130-us+hospitals+for+years+1999-2008) dataset from the UCI Machine Learning Repository (Clore et al., 2014, DOI [10.24432/C5230J](https://doi.org/10.24432/C5230J), CC BY 4.0). It contains 101,766 hospital stays from 71,518 patients across 130 US hospitals, recorded between 1999 and 2008, with 50 columns covering patient details, admission and discharge, diagnoses, tests, medications and readmission. It is de-identified clinical record data.
+
+A second file, `IDS_mapping.csv`, translates the code numbers for admission type, discharge destination and admission source into readable labels.
 
 | | |
 |---|---|
-| **Source** | [Diabetes 130-US Hospitals for Years 1999-2008](https://archive.ics.uci.edu/dataset/296/diabetes+130-us+hospitals+for+years+1999-2008), UCI Machine Learning Repository |
-| **Citation** | Clore, J., Cios, K., DeShazo, J. and Strack, B. (2014). DOI: [10.24432/C5230J](https://doi.org/10.24432/C5230J) |
-| **Licence** | CC BY 4.0 |
-| **Type** | De-identified clinical encounter records |
-| **Size** | 101,766 inpatient encounters, 50 columns, 71,518 unique patients, 130 US hospitals |
-| **Lookup file** | IDS_mapping.csv, holding three code tables (admission type, discharge disposition, admission source) stacked in one file |
-| **Grain** | One row is one hospital encounter, not one patient |
+| **Rows** | 101,766 hospital stays |
+| **Columns** | 50 |
+| **Patients** | 71,518 |
+| **Hospitals** | 130 (United States) |
+| **Period** | 1999 to 2008 |
+| **One row means** | One hospital stay (an "encounter"), not one patient. The same patient can appear several times |
 
-**Outcome:** an encounter counts as readmitted when `readmitted = "<30"` (readmitted within 30 days of discharge). Readmissions after 30 days are treated as not readmitted.
+**Limitations of the data:** it is historical, it has no admission dates, it may not capture readmissions to hospitals outside the dataset, and some fields are mostly empty (for example, weight is 96.9% missing).
 
-**Exclusions:** 2,423 encounters ending in death (discharge codes 11, 19, 20, 21) or hospice (13, 14) are excluded, because these patients cannot or are very unlikely to return. This leaves **99,343 included encounters from 69,990 patients**.
+## 4. Problem statement
 
-**Known limitations of the data:** no admission dates, records from 1999 to 2008, readmissions to other hospitals not captured, and several sparse fields (for example weight is 96.9% missing).
+Diabetic readmissions had been flagged again, and the care-coordination team needed to know where to focus its limited time. The project set out to answer three questions:
 
-## Problem statement
+- **The number:** how often are diabetic patients readmitted within 30 days?
+- **The pattern:** which recorded characteristics go with higher readmission rates?
+- **The action:** how could the team target its time, and how much work would that involve?
 
-The stakeholder needed answers to three questions:
+**What counts as a readmission:** a stay counts as readmitted when the dataset records a return within 30 days of discharge (`readmitted = "<30"`). Returns after 30 days, and stays with no recorded return, both count as not readmitted.
 
-1. **Number:** how often are diabetic patients readmitted within 30 days?
-2. **Pattern:** which characteristics are associated with higher readmission rates?
-3. **Action:** how should a limited care-coordination team target its time, and how much work would that involve?
+## 5. Tools and methodology
 
-## Tools and methodology
-
-### Tools
-
-- **MySQL 8 (MySQL Workbench):** loading, cleaning, modelling, quality checks and analysis
-- **Python (Google Colab, pandas, SciPy, matplotlib):** summary statistics, correlation, significance tests and EDA charts
-- **Power BI Desktop:** Power Query, DAX measures and the interactive dashboard
-- **GitHub:** version control and hosting the images used in the dashboard
+| Tool | How it was used |
+|---|---|
+| **MySQL 8** | Loading, cleaning, building the data model, quality checks and the main analysis queries |
+| **Python (Google Colab)** | Summary statistics, outliers, missing values, correlation, a significance test and charts ([`eda_stats.ipynb`](eda_stats.ipynb)) |
+| **Power BI** | Power Query, DAX measures and a five-page interactive dashboard |
 
 ### Workflow
 
 ```
-Raw CSVs ─► Load (staging) ─► Clean ─► Model (star schema) ─► Quality checks
-        ─► Analysis (SQL + Python) ─► Risk tier and validation ─► Power BI dashboard ─► Recommendations
+Raw files ─► Load ─► Clean ─► Model ─► Quality checks ─► Analysis ─► Risk flag ─► Dashboard ─► Recommendations
 ```
 
-| File | What it does |
-|---|---|
-| `01_load_raw.sql` | Loads both CSV files into text-only staging tables, exactly as they arrive |
-| `02_clean.sql` | Splits the mapping file into three lookup tables, converts data types, standardises missing values and flags exclusions |
-| `03_model.sql` | Builds a star schema with analysis bands (age, length of stay, prior visits, medications, diagnosis group) and unpivots the drug columns into a medication fact table |
-| `04_quality_checks.sql` | Checks row counts, nulls, duplicates and referential integrity, then adds primary keys and indexes |
-| `05_risk_tier.sql` | Compares tier cutoffs, validates the chosen tier on held-out patients, builds the capture curve and estimates workload |
-| `06_analysis.sql` | Ten exploratory questions behind the insights |
+### Data collection
 
-SQL techniques used include CTEs, window functions (`ROW_NUMBER`, `RANK`, `SUM OVER`), `CASE`, `COALESCE`, joins, `CROSS JOIN` for unpivoting, primary keys and indexes. Query results are in [`sql/Sample_Outputs.docx`](sql/Sample_Outputs.docx).
+Both files were downloaded from the UCI repository and loaded into MySQL exactly as they arrived, using text-only staging tables, so nothing was changed before it could be checked ([`01_load_raw.sql`](sql/01_load_raw.sql)).
 
 ### Data cleaning and preparation
 
-| Issue | Decision |
+Cleaning was done in [`02_clean.sql`](sql/02_clean.sql). Each decision is recorded in the [cleaning log](docs/cleaning_log.md).
+
+| Issue found | What was done |
 |---|---|
-| `?` used for missing values | Converted to NULL or "Unknown", depending on the column |
-| `None` in the HbA1c field means the test was not done | Relabelled "Not tested" rather than treated as missing (83.1% of included encounters) |
-| `weight` is 96.9% missing | Column dropped |
-| `examide` and `citoglipton` hold a single value | Columns dropped |
-| Mapping file has three tables stacked in one | Split by line position into three lookup tables |
-| Admission type 6 is labelled "NULL" in the mapping | Relabelled "Not recorded". With "Not Available" and "Not Mapped", 10.2% of encounters have no usable admission type |
-| Raw files use Windows line endings | Loaded with `LINES TERMINATED BY '\r\n'` |
+| `?` used to mean missing | Changed to "Unknown" for descriptive fields and to empty (NULL) for diagnosis codes |
+| "None" in the HbA1c test field means the test was not done | Relabelled "Not tested" rather than treated as missing |
+| Weight is 96.9% missing | Left out of the clean table |
+| Two medication columns hold only one value | Left out, as they carry no information |
+| The lookup file holds three tables stacked in one | Split into three separate tables |
+| Admission type 6 is labelled "NULL" in the lookup file | Relabelled "Not recorded". Together with "Not Available" and "Not Mapped", 10.2% of stays have no usable admission type |
+| Patients who died (1,652 stays) or went to hospice (771 stays) | Flagged and left out of the analysis. Patients who died cannot be readmitted, and hospice care has different goals, so both were treated as outside the scope of a readmission-prevention programme. The rows were kept so they can still be inspected |
 
-### Data transformation
+After exclusions, the analysis covers **99,343 stays from 69,990 patients**.
 
-- Age, length of stay, prior inpatient visits and medication count grouped into bands, each with a sort order.
-- Over 700 primary diagnosis codes grouped into 9 diagnosis groups by ICD-9 range.
-- 21 drug columns unpivoted into one row per encounter per drug (120,054 rows).
-- A 30-day readmission flag and an exclusion flag added to every encounter.
+### Data transformation and processing
 
-### Data model
+In [`03_model.sql`](sql/03_model.sql):
 
-A star schema with two fact tables (`fact_encounter`, `fact_medication`) and five dimensions (admission type, discharge disposition, admission source, diagnosis group, drug).
+- Age, length of stay, prior inpatient visits and number of medications were grouped into bands, each with a sort order so charts display correctly.
+- More than 700 primary diagnosis codes were grouped into nine diagnosis groups.
+- The 21 medication columns were reshaped into one table with a row for each stay and drug (120,054 rows).
+- A 30-day readmission flag and an exclusion flag were added to every stay.
 
-![Data model](PowerBi/powerQuery/model_view.png)
+### Calculated fields and DAX measures
 
-### DAX measures
-
-48 measures in total. Key ones include Readmission Rate, Tier Rate, Rest Rate, Capture Rate, Lift, Staff Hours (Tier and All), Hours per Readmission (Tier and All), Option measures for comparing cutoffs, and Rate (min 30), which hides rates based on fewer than 30 encounters. Every rate counts included encounters only. The full list is in [`PowerBi/dax_measures.txt`](PowerBi/dax_measures.txt), and the Power Query steps are in [`PowerBi/powerQuery/`](PowerBi/powerQuery/).
+The Power BI model includes DAX measures for the readmission rate, flagged-group rate, rate for everyone else, share of readmissions captured, staff hours and hours per readmission reached. A measure called Rate (min 30) hides rates for groups with fewer than 30 stays, so very small groups do not give a misleading picture. Every rate counts included stays only. The full list is in [`PowerBi/dax_measures.txt`](PowerBi/dax_measures.txt).
 
 ### Data validation
 
-- Row counts matched between staging and model tables (101,766), with 0 duplicate encounter IDs and 0 orphaned keys.
-- Every headline figure matched across SQL, Python and Power BI (99,343 encounters, 11,314 readmissions, 11.39%).
-- The risk tier was built on 70% of patients and tested on the other 30% (`MOD(patient_nbr, 10) < 7`), so no patient appears in both groups.
+[`04_quality_checks.sql`](sql/04_quality_checks.sql) checks row counts, missing values, duplicates and links between tables, then adds keys and indexes.
 
-### Workload assumptions
+- Row counts matched between the raw and modelled tables (101,766).
+- There were no duplicate stays and no broken links between tables.
+- The headline figures (99,343 stays, 11,314 readmissions, 11.4%) matched across SQL, Python and Power BI.
 
-Staff hours assume **2 contacts per patient at 20 minutes each**. Both values are adjustable with what-if sliders on the Workload page of the dashboard.
+### Data modelling
 
-## Exploratory data analysis
+A star schema with two fact tables, hospital stays (`fact_encounter`) and medications (`fact_medication`), linked to five lookup tables: admission type, discharge destination, admission source, diagnosis group and drug.
 
-| | Finding |
-|---|---|
-| **Distributions** | Length of stay and medication count are right-skewed (median 4 days and 15 medications). 66.7% of encounters have no prior inpatient visits |
-| **Outliers** | Prior visits reach up to 76 emergency and 21 inpatient. These are real frequent attenders, so they were kept and grouped into open-ended bands ("6+", "31+") rather than removed |
-| **Missing values** | Weight 96.9%, medical specialty 48.9%, payer code 39.7%, race 2.2% |
-| **Correlations** | Prior inpatient visits has the strongest link with readmission (Spearman 0.14), more than twice any other numeric field. Length of stay and medications move together (0.46) |
-| **Trends** | The data has no dates, so trends over time cannot be measured. Visit order (using `encounter_id`) shows risk rising with each return |
+![Data model](PowerBi/powerQuery/model_view.png)
+
+*The data model in Power BI. Each lookup table links to the hospital stays table through its ID.*
+
+### Data visualisation
+
+A five-page interactive Power BI dashboard was built to answer the stakeholder's three questions, from the size of the problem through to the staff time needed. See [section 8](#8-dashboard-preview).
+
+## 6. Exploratory data analysis
+
+The exploratory analysis was done in SQL ([`06_analysis.sql`](sql/06_analysis.sql), ten questions) and Python ([`eda_stats.ipynb`](eda_stats.ipynb)). Query results are in [`sql/Sample_Outputs.docx`](sql/Sample_Outputs.docx), and the full write-up is in the [EDA report](docs/eda_report.md).
+
+**Key patterns.** The readmission rate rises steadily with the number of inpatient stays in the previous year. Other characteristics, such as age, diagnosis group and admission type, show much smaller differences.
+
+**Distributions.** Most stays were short and used a moderate number of medications (median 4 days and 15 medications). Both are right-skewed, with a long tail of longer, more complex stays. More than half of stays had no inpatient stay in the previous year.
+
+![Distributions](Screenshots/EDA/eda_distributions.png)
+
+**Trends.** The data has no dates, so trends over time cannot be measured. This also means the analysis cannot show when any increase in readmissions started.
+
+**Outliers.** Some patients had very high numbers of earlier visits, up to 76 emergency visits and 21 inpatient stays. These are real frequent attenders rather than errors, so they were kept and placed in open-ended bands such as "6+".
+
+**Missing values.** Weight (96.9%), medical specialty (48.9%) and payer code (39.7%) are the most incomplete fields. Race is missing for 2.2% of stays.
+
+![Missing values](Screenshots/EDA/eda_missingness.png)
+
+**Correlations.** Of the eight numeric fields tested, the number of inpatient stays in the previous year had the strongest relationship with readmission (Spearman correlation 0.14). This is a modest relationship, but more than twice as strong as any other field.
 
 ![Correlation with readmission](Screenshots/EDA/eda_correlation_outcome.png)
 
-The full EDA, with distributions, missing values, outliers and the correlation matrix, is in [`docs/eda_report.md`](docs/eda_report.md).
+## 7. Key insights
 
-## Key insights
+All insights describe **patterns in historical data, not causes**. Each comparison looks at one characteristic at a time.
 
-All insights describe **associations in historical data**, not causes.
+**1. Previous hospital stays are the clearest warning sign.**
+*What happened:* the 30-day readmission rate rises from 8.6% for patients with no inpatient stays in the previous year to 40.6% for those with six or more.
+*Why:* repeated stays may reflect more complex or less stable health.
+*Why it matters:* this information is already in the patient record, so discharge staff can use it without collecting anything new.
 
-**1. Readmissions are concentrated in returning patients.**
-Patients with 2 or more encounters are 23.4% of patients but account for 79.8% of readmissions. This suggests the problem sits with a recognisable group rather than being spread evenly, so targeting can reach many readmissions with limited effort.
+**2. Readmissions are concentrated in a smaller group of patients.**
+*What happened:* patients with two or more stays in the data make up 23.4% of patients but account for 79.8% of readmissions.
+*Why:* part of this is built in, because a readmission is itself another stay. Even so, the problem is not spread evenly across patients.
+*Why it matters:* a concentrated problem can be targeted, which suits a team that cannot contact everyone.
 
-**2. Previous hospital stays are the clearest warning sign.**
-The 30-day rate rises steadily from 8.6% with no prior inpatient visits to 40.6% with 6 or more, and the same pattern holds within every diagnosis group. Prior stays likely reflect more complex or less stable health, which makes this field a practical, already-recorded signal for discharge planning.
+**3. A simple flag separates higher-risk stays, and holds on other patients.**
+*What happened:* stays where the patient had two or more inpatient stays in the previous year had a 22.0% readmission rate, compared with 9.6% for the rest. A chi-square test, which checks whether a difference is larger than chance alone would produce, gave 1,841 (p < 0.001). When patients were split by ID into a 70% group and a 30% group, so that no patient appeared in both, the flagged rate was 2.38 times the rest in the first group and 2.07 times in the second.
+*Why:* the flag is built on the strongest single signal in the data.
+*Why it matters:* the pattern is consistent across separate groups of patients, so it is not simply a feature of one sample.
 
-**3. Where patients go after discharge matters.**
-Encounters transferred to other care had a 20.0% rate, compared with 9.3% for those discharged home. Transfers may signal higher need and more hand-offs between services, which points to discharge destination as a useful second prompt.
+**4. Targeting roughly halves the staff time per readmission reached.**
+*What happened:* contacting every stay would take an estimated 66,229 hours, or 5.9 hours per readmission reached. Contacting only the flagged group would take 9,409 hours, or 3.0 hours per readmission reached.
+*Why:* the flagged group is small (14.2% of stays) but holds a large share of readmissions (27.5%).
+*Why it matters:* a limited budget reaches more of the patients at highest risk.
 
-**4. Most other factors move the rate only a little.**
-Age (adults 30 to 99: 9.8% to 12.6%), diagnosis group (9.5% to 13.1%), admission type (10.5% to 11.8%), medications and length of stay each shift the rate by under 5 points. They are useful context for a care plan, but too weak to target on.
+**5. Discharge destination shows a large difference, but needs a closer look.**
+*What happened:* stays where the patient went home had a 9.3% readmission rate. A combined group of all other discharge codes not listed separately, which includes transfers to other hospitals and care facilities, had 20.0%.
+*Why:* patients moving between services may have higher needs, but this group mixes several types of discharge.
+*Why it matters:* it is a promising lead, but it needs to be broken down before it can guide practice.
 
-**5. A one-line rule works on unseen patients.**
-Encounters with 2 or more prior inpatient visits have a 22.0% rate against 9.6% for the rest (chi-square 1,841, p < 0.001). On the 30% of patients held back for testing, the flagged group still had 2.07 times the rate of others and held 25.6% of readmissions, so the rule is not just fitted to the data it came from.
+**6. Most other characteristics make only a small difference.**
+*What happened:* length of stay (9.3% to 13.8%), number of medications (9.2% to 13.2%), diagnosis group (9.5% to 13.1%), age for adults aged 30 to 99 (9.8% to 12.6%) and admission type (10.5% to 11.8%) each shift the rate by less than five percentage points.
+*Why:* in this data, these characteristics carry much less signal than previous hospital use.
+*Why it matters:* they are useful context for a care plan, but too weak on their own to decide who receives follow-up.
 
-**6. Targeting halves the effort per readmission reached.**
-Contacting everyone would take about 66,229 staff hours, or 5.9 hours per readmission reached. The flagged group takes 9,409 hours, or 3.0 hours per readmission, which makes the case for a limited budget.
+## 8. Dashboard preview
 
-## Dashboard
+Five interactive pages, built in Power BI:
 
-Five pages, built in Power BI:
-
-| Page | Question it answers |
+| Page | What it answers |
 |---|---|
 | **Overview** | How big is the problem? |
 | **Patterns** | Which characteristics go with higher rates? |
-| **Risk Tier** | Who should be flagged, and how well does the flag work? |
-| **Workload** | What would targeting cost in staff time? |
-| **Explorer** | How do the patterns look within each diagnosis group? |
+| **Risk Tier** | Who would be flagged, and how well does the flag separate risk? |
+| **Workload** | What would different options cost in staff time? |
+| **Explorer** | Do the patterns hold within each diagnosis group? |
 
-**KPIs shown:** encounters, unique patients, 30-day readmission rate, average length of stay, tier share, tier rate, readmissions captured, staff hours and hours per readmission reached.
+**KPI cards:** stays, unique patients, 30-day readmission rate, average length of stay, share of stays flagged, flagged-group rate, share of readmissions captured, staff hours and hours per readmission reached.
 
-**Filters and interaction:** an admission type filter synced across all pages, a Filters panel (age, discharge destination, HbA1c testing), an Insights panel on every page, what-if sliders for staffing assumptions, and diagnosis group buttons. Rates based on fewer than 30 encounters are hidden so small groups do not mislead.
+**Filters and interaction:** an admission type filter that applies to every page, a filters panel (age, discharge destination and HbA1c testing), an insights panel on each page, sliders for the workload assumptions and diagnosis group buttons.
 
 | | |
 |---|---|
 | ![Patterns](Screenshots/PowerBi/02_patterns.png) | ![Risk Tier](Screenshots/PowerBi/03_risk_tier.png) |
 | ![Workload](Screenshots/PowerBi/04_workload.png) | ![Explorer](Screenshots/PowerBi/05_explorer.png) |
 
-A PDF of every page is in [`PowerBi/Meridian_Readmissions_Dashboard.pdf`](PowerBi/Meridian_Readmissions_Dashboard.pdf).
-
-## Recommendations
-
-**1. Flag patients with 2 or more inpatient stays in the past year at discharge** (insights 2 and 5).
-Add the question to the discharge checklist and give flagged patients two follow-up contacts within 30 days. It uses a field already in the record, needs no model, and anyone can see why a patient was flagged.
-
-**2. Use discharge destination as a second prompt** (insight 3).
-For patients transferred to other care, confirm the hand-over with the receiving service, as this group had double the rate of patients sent home.
-
-**3. Match the cutoff to capacity** (insight 6).
-Start with 2 or more stays. If capacity is tighter, the 3+ option reaches 15.9% of readmissions for 4,543 hours; with more budget, 1+ reaches 49.7% for 22,065 hours.
-
-**4. Improve recording of admission type** (data quality).
-10.2% of encounters have no usable admission type. Better recording would make future analysis more reliable.
-
-**5. Monitor fairness** (insight 5).
-The rule uses no demographic fields, but the share flagged ranges from 6.7% to 15.8% by race. Review who is flagged, and their outcomes, every quarter.
-
-**Illustrative impact:** if follow-up prevented 1 in 10 readmissions in the flagged group, that would be around 311 fewer readmissions across this data. This is an assumption to test, not a measured effect.
-
-## Implementation
-
-| | Pilot plan |
+| | |
 |---|---|
-| **What** | Pilot the 2+ flag and two follow-up contacts on one ward |
-| **Who** | Discharge planning lead (flagging), care-coordination team (follow-up), Population Health analytics (measurement), VP of Population Health (decision to scale) |
-| **When** | Month 1: add the question to the discharge checklist and train staff. Months 1 to 3: run the pilot. Month 4: compare results and decide whether to scale |
-| **Success measures** | Lower 30-day readmission rate on the pilot ward than a similar comparison ward; at least 80% of flagged patients contacted; hours per readmission reached at or below 3.0 |
-| **Resources** | About 40 minutes of staff time per flagged patient, plus the existing dashboard for monitoring |
-| **Risks** | Patterns from older data may not hold today (re-check on current local data first); the flag misses 72.5% of readmissions (keep clinical judgement and allow staff referrals); unequal flagging by group (quarterly fairness review) |
+| ![Insights panel](Screenshots/PowerBi/06_insights_panel.png) | ![Filters panel](Screenshots/PowerBi/07_filters_panel.png) |
+| *The insights panel explains each page in plain language* | *The filters panel narrows every chart on the page* |
 
-## Limitations
+**Workload assumptions:** staff hours assume two follow-up contacts of 20 minutes each for every eligible discharge. A patient with several eligible stays is counted once for each discharge. Both values can be changed with the sliders on the Workload page. The slider is labelled "contacts per patient", but the calculation applies it to each discharge.
 
-- **Association, not causation.** The patterns describe what was observed, not why it happened.
-- **Historical data.** Encounters date from 1999 to 2008, so absolute rates may not reflect current practice.
-- **No admission dates.** `encounter_id` is used as a stand-in for visit order, and trends over time cannot be measured.
-- **Readmissions are only those recorded** in this dataset. Returns to other hospitals are not captured.
-- **Encounters, not patients.** Most figures count encounters, and one patient can appear several times.
-- **Concentration is partly built in.** Patients who are readmitted naturally have more encounters on record.
-- **Not clinically validated.** The tier is an analytical flag for prioritising follow-up, not a prediction model or a diagnosis.
+## 9. Recommendations
 
-## Conclusion
+**1. Pilot the 2+ flag at discharge** (insights 1, 3 and 4).
+Add "inpatient stays in the past 12 months" to the discharge checklist on one ward, and give each flagged discharge two follow-up contacts within 30 days. The flag uses information already in the record, needs no software, and anyone can see why a patient was flagged. *Expected impact:* in this data, the flagged group held 27.5% of readmissions, for an estimated 86% fewer contact hours than contacting every stay.
 
-Diabetic readmissions in this data cluster among patients who have already been in hospital. A simple rule, two or more inpatient stays in the past year, picks out one encounter in seven at more than double the usual risk, and lets a care-coordination team reach over a quarter of readmissions for about a seventh of the effort of contacting everyone. The value of the project is not the dashboard itself but a clear, explainable and costed decision: who to follow up, and why. The next step is a small pilot on current local data, measured carefully, with fairness monitored throughout.
+**2. Match the cutoff to the team's capacity** (insight 4).
+Start with 2+. If capacity is tighter, the 3+ option reaches 15.9% of readmissions for an estimated 4,543 hours. With more capacity, the 1+ option reaches 49.7% for 22,065 hours. *Expected impact:* the team can choose a level of coverage it can actually deliver.
 
-## Documentation and links
+| Who gets follow-up | Stays | Share of readmissions reached | Estimated contact hours | Hours per readmission reached |
+|---|---|---|---|---|
+| Every stay | 99,343 | 100% | 66,229 | 5.9 |
+| 1+ prior stays | 33,098 | 49.7% | 22,065 | 3.9 |
+| **2+ prior stays** | **14,114** | **27.5%** | **9,409** | **3.0** |
+| 3+ prior stays | 6,814 | 15.9% | 4,543 | 2.5 |
 
-| Document | What it covers |
+**3. Break down the "other discharge" group before using it** (insight 5).
+Analyse its individual discharge codes to find which ones carry the higher rate. *Expected impact:* a second, more precise prompt for discharge staff, if the analysis supports one.
+
+**4. Check who is flagged, and who is missed** (insight 3).
+The flag does not use race or gender, but that alone does not make it fair. Before and during the pilot, review who is flagged and who is not across patient groups. *Expected impact:* problems are caught early, before the flag is used more widely.
+
+**5. Improve recording of admission type** (data quality).
+10.2% of stays have no usable admission type. *Expected impact:* more reliable analysis in future.
+
+## 10. Limitations
+
+- **Patterns, not causes.** The data shows which groups had higher rates, not why, and not whether follow-up would change the outcome.
+- **Historical data.** The stays date from 1999 to 2008, so current rates and practice may differ.
+- **Repeat patients.** The same patient can appear several times. The chi-square test and confidence intervals treat each stay as independent and may overstate how certain the result is.
+- **How the cutoff was chosen.** The 1+, 2+ and 3+ cutoffs were compared in both patient groups, so the 30% group is a consistency check rather than a fully independent test.
+- **No dates.** Trends over time cannot be measured. Query Q10 in `06_analysis.sql` uses the encounter ID as a stand-in for visit order. This has not been confirmed, so Q10 is treated as exploratory and is not used in the findings.
+- **Recorded readmissions only.** Returns to hospitals outside the dataset may not be captured.
+- **Missing and grouped information.** Some fields are largely missing, and broad groups (such as the "other discharge" group) can hide differences.
+- **One characteristic at a time.** The comparisons do not show how characteristics combine, or whether a combined approach would target better.
+- **Limited coverage.** 72.5% of readmissions happen outside the flagged group.
+- **Workload is an estimate.** The hours cover the whole dataset rather than one year, and leave out administration and failed contact attempts. They estimate effort, not readmissions prevented.
+- **Not clinically validated.** The flag is an analytical tool for prioritising follow-up. It is not a prediction model or a diagnosis.
+
+## 11. Implementation
+
+| Question | Plan |
 |---|---|
-| [Full report](docs/REPORT.md) | Executive summary, methods, results, action plan, ethics |
-| [Exploratory analysis](docs/eda_report.md) | Summary statistics, missing values, correlation, outliers, ten insights |
-| [Data dictionary](docs/data_dictionary.md) | Every field, its type, definition and handling |
-| [Cleaning log](docs/cleaning_log.md) | Each cleaning decision, data lineage and refresh steps |
+| **What needs to be done?** | Pilot the 2+ flag and two follow-up contacts on one ward |
+| **Who is responsible?** | Discharge planning lead (flagging), care-coordination team (follow-up), Population Health analytics (measurement), VP of Population Health (decision to scale) |
+| **When should it happen?** | Before the pilot: re-check the pattern on current local data. Month 1: add the question to the checklist and brief staff. Months 1 to 3: run the pilot. Month 4: review results and decide next steps |
+| **How will we know it worked?** | Lower 30-day readmission rate on the pilot ward than a similar comparison ward; at least 80% of flagged discharges contacted; actual staff time close to the estimate |
+| **What resources are needed?** | About 40 minutes of staff time per flagged discharge, plus the existing dashboard for monitoring |
+| **What could go wrong?** | The pattern may not hold in current data (re-check first). The flag misses most readmissions (staff can still refer patients who are not flagged). Staff may treat the flag as a diagnosis (brief them that it only prioritises follow-up). Some groups may be flagged more than others (review who is flagged every quarter) |
+
+## 12. Conclusion
+
+Meridian Care Network needed to know where its limited follow-up capacity should go. The analysis found that diabetic readmissions in this data cluster among patients who have already spent time in hospital. A single question at discharge, two or more inpatient stays in the past year, picks out about one stay in seven at more than twice the usual readmission rate, and covers over a quarter of all readmissions for about a seventh of the contact hours. The value of the project is a decision the care team can understand and explain: who to follow up, why, and at what cost. The next step is to test it with a small, measured pilot on current local data.
+
+## 13. Relevant links
+
+| Link | Description |
+|---|---|
+| [GitHub repository](https://github.com/Orhmo/Hospital-readmissions) | All files for this project |
+| [Power BI file](PowerBi/Meridian_Readmissions_Dashboard.pbix) | The interactive dashboard (open in Power BI Desktop) |
+| [Dashboard PDF](PowerBi/Meridian_Readmissions_Dashboard.pdf) | Every dashboard page as a PDF |
+| [Full report](docs/REPORT.md) | Methods, results, action plan, ethics and limitations |
+| [EDA report](docs/eda_report.md) | Summary statistics, missing values, correlation, outliers and the ten exploratory questions |
+| [Data dictionary](docs/data_dictionary.md) | Every field, its type, meaning and handling |
+| [Cleaning log](docs/cleaning_log.md) | Each cleaning decision and the reason for it |
 | [Dataset source](https://archive.ics.uci.edu/dataset/296/diabetes+130-us+hospitals+for+years+1999-2008) | UCI Machine Learning Repository |
 
-## Repository structure
+### Repository structure
 
 ```
 Hospital-readmissions/
 ├── README.md
-├── eda_stats.ipynb     EDA statistics and charts (Python, Google Colab)
+├── eda_stats.ipynb     statistics and charts (Python, Google Colab)
 ├── data/
 │   ├── raw/            original UCI files
-│   └── clean/          the seven tables exported from MySQL
-├── sql/                01_load_raw.sql to 06_analysis.sql, plus Sample_Outputs.docx
-├── PowerBi/            .pbix, PDF, DAX measures, Power Query screenshots (powerQuery/)
+│   └── clean/          seven tables exported from MySQL
+├── sql/                scripts 01 to 06, plus Sample_Outputs.docx
+├── PowerBi/            Power BI file, PDF, DAX measures and Power Query screenshots
 ├── Screenshots/
 │   ├── PowerBi/        dashboard pages
-│   └── EDA/            EDA charts from the notebook
-├── images/             diagnosis group images used in the Explorer page
-└── docs/               final report, EDA report, data dictionary, cleaning log
+│   └── EDA/            charts from the notebook
+├── images/             diagnosis group illustrations used in the dashboard
+└── docs/               report, EDA report, data dictionary and cleaning log
 ```
 
-## How to reproduce
+### How to reproduce
 
-1. Download the dataset from UCI (link above) into `data/raw/`.
-2. In MySQL 8, enable local file loading (`SET GLOBAL local_infile = 1;`).
-3. Update the file paths at the top of `01_load_raw.sql`, then run the scripts `01` to `06` in order.
-4. For the EDA statistics and charts, open `eda_stats.ipynb` in Google Colab, upload `diabetic_data.csv` and run all cells.
-5. Open `PowerBi/Meridian_Readmissions_Dashboard.pbix` in Power BI Desktop. If prompted, point the data source to the CSV files in `data/clean/` (Transform data, then Data source settings).
+1. In MySQL 8, allow local file loading (`SET GLOBAL local_infile = 1;`) and start with an empty `meridian` database.
+2. Update the two file paths at the top of `01_load_raw.sql`, then run scripts `01` to `06` in order.
+3. Export the seven model tables to `data/clean/`. The exports in this repository use semicolons as separators.
+4. Open `eda_stats.ipynb` in Google Colab, upload `diabetic_data.csv` and run the cells in order.
+5. Open the Power BI file, point the data source to the files in `data/clean/` if prompted, and refresh. The Overview page should show 99,343 stays and 11,314 readmissions.
 
-## Image credits
+The workload query in `05_risk_tier.sql` uses the fixed total of 11,314 readmissions, which matches this dataset. Replace it with a calculated total before using different data.
 
-The anatomy illustration on the Overview page is AI-generated, using an illustration from [St. Paul’s Hospital, Hong Kong](https://www.stpaul.org.hk/en/center-and-service/other-content/detail/understanding-liver-gallbladder-and-pancreas-functions-health) as a visual reference. It is not the original image.
+### Image credits
 
-The diagnosis group illustrations on the Explorer page (in `images/`) are also AI-generated.
+The anatomy illustration on the Overview page is AI-generated, using an illustration from [St. Paul's Hospital, Hong Kong](https://www.stpaul.org.hk/en/center-and-service/other-content/detail/understanding-liver-gallbladder-and-pancreas-functions-health) as a visual reference. The diagnosis group illustrations are also AI-generated.
 
-## Author
+### Author
 
 Valentina · Orhmo
