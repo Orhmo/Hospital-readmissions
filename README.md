@@ -114,7 +114,7 @@ A star schema with two fact tables (`fact_encounter`, `fact_medication`) and fiv
 
 ### DAX measures
 
-Key measures include Readmission Rate, Tier Rate, Rest Rate, Capture Rate, Lift, Staff Hours, Hours per Readmission Reached and a Rate (min 30) measure that hides rates based on fewer than 30 encounters. Every rate counts included encounters only. The full list is in [`PowerBi/dax_measures.txt`](PowerBi/dax_measures.txt), and the Power Query steps are in [`PowerBi/powerQuery/`](PowerBi/powerQuery/).
+48 measures in total. Key ones include Readmission Rate, Tier Rate, Rest Rate, Capture Rate, Lift, Staff Hours (Tier and All), Hours per Readmission (Tier and All), Option measures for comparing cutoffs, and Rate (min 30), which hides rates based on fewer than 30 encounters. Every rate counts included encounters only. The full list is in [`PowerBi/dax_measures.txt`](PowerBi/dax_measures.txt), and the Power Query steps are in [`PowerBi/powerQuery/`](PowerBi/powerQuery/).
 
 ### Data validation
 
