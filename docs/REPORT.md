@@ -2,8 +2,6 @@
 
 **Meridian Care Network (fictional) · Population Health**
 
----
-
 ## 1. Executive summary
 
 **Context.** Meridian Care Network's quality committee has flagged diabetic readmissions again. The VP of Population Health asked for a way to identify patients at elevated risk before discharge, and a case for where to spend a limited care-coordination budget.
@@ -27,8 +25,6 @@
 | Hours per readmission reached | **3.0** | 5.9 |
 
 The tier's rate (22.0%) is **2.29 times** the rate of everyone else (9.6%), and the rule held up on patients it was not built on (2.07 times). **Illustrative impact:** if follow-up prevented one in ten readmissions in the tier, that would mean about **311 fewer readmissions** for 9,409 staff hours. This is an assumption to test, not a measured effect.
-
----
 
 ## 2. Project overview
 
@@ -56,8 +52,6 @@ A readmission here means **a recorded return within 30 days of discharge** (`rea
 | Grain | **One row is one encounter, not one patient** |
 
 The data is historical and de-identified. Findings are for analytical learning and do not describe any real organisation.
-
----
 
 ## 3. Methods
 
@@ -105,8 +99,6 @@ Full details are in `docs/cleaning_log.md`.
 - **Encounters, not patients.** One patient can appear several times.
 - **Concentration is partly built in.** Patients who are readmitted naturally have more encounters on record.
 - **The tier is not clinically validated.** It is an analytical flag, not a prediction model or a diagnosis.
-
----
 
 ## 4. Results
 
@@ -189,8 +181,6 @@ Each step up the cutoff makes the team's time more efficient but reaches fewer r
 
 Women were flagged slightly more often than men (14.6% vs 13.8%). The tier uses no demographic fields, so these differences reflect differences in prior hospital use. They still need monitoring, because they decide who receives extra support.
 
----
-
 ## 5. Action plan
 
 ### 5.1 Prioritised next steps
@@ -223,8 +213,6 @@ Women were flagged slightly more often than men (14.6% vs 13.8%). The tier uses 
 | Unequal flagging by group | Monitor quarterly and review the rule if gaps widen |
 | Capacity is lower than assumed | Use the Workload page to switch to the 3+ option |
 
----
-
 ## 6. Ethics and privacy
 
 - **De-identified data.** The dataset contains no names, addresses or dates. Patient and encounter IDs are anonymised numbers.
@@ -234,12 +222,8 @@ Women were flagged slightly more often than men (14.6% vs 13.8%). The tier uses 
 - **Transparency.** The rule is one line, the code is public in this repository, and anyone can check why a patient was flagged.
 - **Real-world use.** Applying this to real patient data would need a data protection impact assessment, information governance approval and local clinical validation.
 
----
-
 ## 7. Conclusion
 
 Diabetic readmissions in this data cluster among patients who have already been in hospital. A simple rule, two or more inpatient stays in the past year, picks out one encounter in seven at more than double the usual risk, and lets a care-coordination team reach over a quarter of readmissions for about a seventh of the effort of contacting everyone. The next step is to test it on current local data with a small pilot, measure the effect, and keep a close eye on fairness.
-
----
 
 **Repository:** dashboard (`PowerBi/`), SQL (`sql/`), data dictionary, cleaning log and EDA report (`docs/`).
