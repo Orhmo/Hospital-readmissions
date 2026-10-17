@@ -1,6 +1,6 @@
 # Exploratory Data Analysis
 
-All figures use the **99,343 included encounters** (expired and hospice discharges removed) unless stated otherwise. Queries are in `sql/06_analysis.sql`; summary statistics, correlations, the significance test and charts come from `notebooks/eda_stats.ipynb` (Python); field definitions are in `data_dictionary.md`.
+All figures use the **99,343 included encounters** (expired and hospice discharges removed) unless stated otherwise. Queries are in `sql/06_analysis.sql`; summary statistics, correlations, the significance test and charts come from `eda_stats.ipynb` (Python, Google Colab); field definitions are in `data_dictionary.md`.
 
 ## 1. Summary statistics
 
@@ -32,11 +32,12 @@ All figures use the **99,343 included encounters** (expired and hospice discharg
 | Field | Missing % | Strategy |
 |---|---|---|
 | weight | 96.9 | Dropped |
-| medical_specialty | 48.9 | Kept but not analysed |
-| payer_code | 39.7 | Kept but not analysed |
-| race | 2.2 | Labelled "Unknown"; used only for the fairness check |
-| diag_2, diag_3 | 0.4, 1.4 | Kept; only diag_1 is used for grouping |
-| admission_type_id | 10.2 (coded NULL, Not Available or Not Mapped) | Labelled "Not recorded" |
+| medical_specialty | 48.9 | Relabelled "Unknown" in the clean table; not carried into the model |
+| payer_code | 39.7 | Relabelled "Unknown" in the clean table; not carried into the model |
+| race | 2.2 | Relabelled "Unknown"; kept in the model but not used in the analysis |
+| diag_1 | Under 0.1 (20 encounters) | Set to NULL and placed in the "Other" diagnosis group |
+| diag_2, diag_3 | 0.4, 1.4 | Set to NULL; only diag_1 is used for grouping |
+| admission_type_id | 10.2 (coded NULL, Not Available or Not Mapped) | Kept. Code 6 ("NULL") relabelled "Not recorded" in Power Query |
 
 **Not missing, but easy to mistake for it:** "None" in A1Cresult (83.1%) and max_glu_serum (94.8%) means the test was not done. These were relabelled "Not tested" rather than treated as gaps.
 
@@ -56,7 +57,7 @@ Spearman correlation was used because the numeric fields are skewed counts and t
 
 ## 5. Outliers
 
-The IQR rule flags many values in the prior-visit fields (for example 11,094 in prior emergency visits), but only because most values are 0. Extreme values (up to 76 emergency visits) are plausible for frequent attenders, so **no rows were removed**. Instead, values were grouped into bands with an open top band ("6+", "31+"). See `cleaning_log.md`, Section 6.
+The IQR rule flags many values in the prior-visit fields (for example 11,094 in prior emergency visits), but only because most values are 0. Extreme values (up to 76 emergency visits) are plausible for frequent attenders, so **no rows were removed**. The data does not allow them to be independently confirmed. Instead, values were grouped into bands with an open top band ("6+", "31+"). See `cleaning_log.md`, Section 6.
 
 ## 6. Ten insights
 
@@ -68,15 +69,13 @@ The IQR rule flags many values in the prior-visit fields (for example 11,094 in 
 | 4 | Age is a weak signal for adults | Q4: ages 30 to 99 range only from 9.8% to 12.6%. Under 20s look low but are small groups (160 and 690) |
 | 5 | Diagnosis group spreads narrowly | Q5: 9.5% (Musculoskeletal) to 13.1% (Diabetes) |
 | 6 | Admission type barely matters, and 10.2% of records lack it | Q6: Emergency 11.8%, Urgent 11.4%, Elective 10.5% |
-| 7 | Discharge destination is the second strongest signal | Q7: Transferred to other care 20.0%, Nursing facility 14.7%, Home 9.3% |
+| 7 | Discharge destination shows the second largest gap | Q7: combined other discharge codes, including transfers, 20.0%; Nursing facility 14.7%; Home 9.3%. The combined group mixes several types of discharge and needs breaking down |
 | 8 | More medications, modestly higher rates | Q8: 9.2% (1 to 10) to 13.2% (21 to 30) |
 | 9 | Longer stays, modestly higher rates | Q9: 9.3% (1 to 2 days) to 13.8% (8 to 14 days) |
-| 10 | Risk builds with each return visit | Q10: 1st visit 9.0%, 2nd 14.2%, 3rd or later 20.9% |
+| 10 | Exploratory only: rates by visit order | Q10: 1st visit 9.0%, 2nd 14.2%, 3rd or later 20.9%. Q10 uses `encounter_id` as a stand-in for date order, which has not been confirmed, so this is not used as a finding |
 
-**Supporting observations**
+**Supporting observation**
 
-- Encounters with **no HbA1c test** had an 11.7% rate, against 9.9% for tested encounters.
-- **Prior emergency visits** follow the same climb as inpatient visits: 10.7% with none, 18.8% with 2, 20.8% with 3.
-- **Medication changed** during the stay: 12.0%, against 10.8% with no change.
+- Encounters with **no HbA1c test** (83.1% of included encounters) had an 11.7% readmission rate, slightly above the 11.4% overall rate (dashboard Patterns page).
 
-All of these are **associations**. For example, "Encounters with longer stays had higher observed readmission rates", not "Longer stays cause readmission".
+All findings are **associations**, and each compares one characteristic at a time. For example, "Encounters with longer stays had higher observed readmission rates", not "Longer stays cause readmission".

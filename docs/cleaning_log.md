@@ -44,12 +44,13 @@ IDS_mapping.csv ───┘
 |---|---|---|---|---|
 | 6 | IDS_mapping | Three tables in one file | Split by line position: admission type (lines 2 to 9), discharge disposition (12 to 41), admission source (44 to 68) | Gives three proper lookup tables. A wrong first attempt on admission source was dropped and rebuilt |
 | 7 | IDs and counts | Stored as text | Cast to integers | Allows joins, sorting and arithmetic |
-| 8 | race, payer_code, medical_specialty, diag_2, diag_3 | `?` used for missing | Converted to NULL or "Unknown" | Makes missing values explicit and countable |
+| 8 | race, payer_code, medical_specialty, diag_1, diag_2, diag_3 | `?` used for missing | "Unknown" for race, payer_code and medical_specialty; NULL for the diagnosis codes | Makes missing values explicit and countable |
+| 8a | gender | 3 rows recorded as "Unknown/Invalid" | Relabelled "Unknown" | Consistent label |
 | 9 | A1Cresult, max_glu_serum | "None" means the test was not done | Relabelled "Not tested" | "None" is a real answer, not a missing value. Treating it as missing would hide that 83.1% of encounters had no HbA1c test |
 | 10 | weight | 96.9% missing | Dropped | Too sparse to analyse or impute honestly |
 | 11 | examide, citoglipton | Only one value ("No") | Dropped | Carry no information |
 | 12 | readmitted | Three classes | Added `readmit_30` (1 for `<30`, else 0) | Matches the project definition of the outcome. `>30` is not merged into `<30` |
-| 13 | discharge_disposition_id | Expired (11, 19, 20, 21) and hospice (13, 14) patients cannot or rarely return | Added `exclusion_reason` instead of deleting rows | Keeps the rows for transparency, while removing 2,423 encounters from rate calculations |
+| 13 | discharge_disposition_id | Expired (11, 19, 20, 21: 1,652 encounters) and hospice (13, 14: 771 encounters) | Added `exclusion_reason` instead of deleting rows | Patients who died cannot be readmitted, and hospice care has different goals, so both were treated as outside the scope of a readmission-prevention programme. Keeping the rows allows them to be inspected, while removing 2,423 encounters from rate calculations |
 | 14 | encounter_id | Needed a unique key | Set as primary key | 0 duplicates found |
 
 **Effect of exclusions:** 101,766 rows become 99,343 included encounters from 69,990 patients. The rate moves from 11.16% (all rows) to 11.39%; keeping hospice in would give 11.34%.
@@ -60,8 +61,9 @@ IDS_mapping.csv ───┘
 |---|---|---|
 | 15 | Built `fact_encounter` with age, length of stay, prior visits and medication bands, each with a sort column | Bands make patterns readable; sort columns keep them in order in SQL and Power BI |
 | 16 | Grouped `diag_1` into 9 diagnosis groups by ICD-9 range | 700+ raw codes are too many to compare |
-| 17 | Unpivoted 21 drug columns into `fact_medication` with a `CROSS JOIN` (120,054 rows) | One row per drug per encounter is easier to count and filter |
+| 17 | Unpivoted 21 drug columns into `fact_medication` with a `CROSS JOIN`, keeping only rows where the status is not "No" (120,054 rows) | One row per drug per encounter is easier to count and filter. The table includes excluded encounters, so they are filtered out where needed |
 | 18 | Created `dim_diag_group` and `dim_drug` | Completes the star schema |
+| 18a | Checked that every encounter matches a row in each lookup table | Confirms no encounter is lost when tables are joined |
 
 ## 5. Quality checks (04_quality_checks.sql)
 
@@ -69,32 +71,33 @@ IDS_mapping.csv ───┘
 |---|---|
 | Row counts, staging vs model | Match (101,766) |
 | Duplicate encounter IDs | 0 |
-| Nulls in key fields | 0 |
-| Fact rows without a matching dimension row (referential integrity) | 0 for every dimension |
+| Nulls in key fields | 0 for the IDs, outcome and diagnosis group (diag_1 is NULL for 20 included encounters, which fall into "Other") |
 | Primary keys and indexes | Added on IDs used for joins |
+
+The lookup coverage checks (every encounter matches a row in each lookup table, 0 unmatched) are in `03_model.sql`.
 
 ## 6. Outliers
 
 | Field | Finding | Decision |
 |---|---|---|
-| number_emergency | Up to 76 prior visits (99th percentile is 3) | **Kept.** Plausible for frequent attenders, and these are the patients the analysis is trying to find |
+| number_emergency | Up to 76 prior visits (99th percentile is 3) | **Kept.** Plausible for frequent attenders, and these are the patients the analysis is trying to find. The data does not allow them to be independently confirmed |
 | number_outpatient | Up to 42 (99th percentile is 5) | Kept, same reason |
 | number_inpatient | Up to 21 (99th percentile is 6) | Kept, and capped at "6+" in the band so a few extreme values do not dominate charts |
 | num_medications | Up to 81 (99th percentile is 43) | Kept, grouped into "31+" |
 | time_in_hospital | 1 to 14 days, no impossible values | Kept |
 
-No values were deleted as outliers. Extreme values are real encounters, so they were handled with bands rather than removed.
+No values were deleted as outliers. Extreme values are plausible, so they were handled with bands rather than removed.
 
 ## 7. Power BI (Power Query and DAX)
 
 | # | Step | Reason |
 |---|---|---|
 | 19 | Renamed tables (Encounters, Medications, Admission Type, Discharge Destination, Admission Source, Diagnosis Group, Drugs) | Readable names for report users |
-| 20 | Replaced blank text with null, and null descriptions with "Not recorded" | Consistent labels in slicers and charts |
-| 21 | Added `image_url` to Diagnosis Group, pointing at images hosted on GitHub | Powers the Explorer page image |
+| 20 | Replaced blank text with null, and empty lookup descriptions with "Not recorded" (this is where admission type 6 becomes "Not recorded") | Consistent labels in slicers and charts |
+| 21 | Built `image_url` for each diagnosis group from its name, pointing at images hosted on GitHub | Powers the Explorer page image |
 | 22 | Added `Prior Visits Label` as a text column | Power BI turned "6+" into the number 6 |
 | 23 | Measures filter on `exclusion_reason` being blank | Every rate uses included encounters only |
-| 24 | `Rate (min 30)` hides rates based on fewer than 30 encounters | Stops small groups (for example 15 encounters) showing misleading rates |
+| 24 | `Rate (min 30)` hides rates based on fewer than 30 encounters. Used on the two Explorer page charts | Stops very small diagnosis subgroups (for example 15 encounters) showing misleading rates |
 | 25 | Turned off Auto date/time | No date fields; reduces model size and freezes |
 
 Power Query step screenshots are in `PowerBi/powerQuery/`.
@@ -103,4 +106,4 @@ Power Query step screenshots are in `PowerBi/powerQuery/`.
 
 1. Re-run the SQL scripts if the raw data changes, then re-export the seven tables to `data/clean/`.
 2. In Power BI Desktop, go to **Home**, then **Transform data**, then **Data source settings**, and point each source at the files in `data/clean/`.
-3. Click **Refresh**. Check the Overview page shows 99,343 encounters and an 11.4% rate.
+3. Click **Refresh**. Clear any admission type, diagnosis or panel filters, then check the Overview page shows 99,343 encounters and an 11.4% rate.
