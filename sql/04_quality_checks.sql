@@ -22,7 +22,7 @@ FROM fact_encounter;
 -- Duplicate check: encounters and patients
 SELECT
     COUNT(*)                     AS total_rows,
-    COUNT(DISTINCT encounter_id) AS unique_encounters,s
+    COUNT(DISTINCT encounter_id) AS unique_encounters,
     COUNT(DISTINCT patient_nbr)  AS unique_patients
 FROM fact_encounter;
 
