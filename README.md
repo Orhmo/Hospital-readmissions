@@ -312,4 +312,4 @@ The anatomy illustration on the Overview page is AI-generated, using an illustra
 
 ### Author
 
-Valentina · Orhmo
+**Orhmo**
